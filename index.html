@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Client Setup Form | Punk Hous</title>
+<!--
+  PUNK HOUS // NEW CLIENT SETUP FORM (owned, hosted free, embeds into Wix)
+  Replaces the Pipedrive Lead Booster "New Client Setup Form".
+
+  WIRING:
+    1. WEBHOOK_URL  -> LIVE: Make custom webhook (hook 2756767) that creates the Pipedrive record.
+    2. LOGO_URL     -> the R2 crown-logo URL (optional; a text wordmark shows until then).
+
+  FIELD CONTRACT (these "name" values are what Make maps from):
+    company_legal_name       -> Organization: Name
+    company_dba              -> Organization: QBO Customer Display Name
+    business_url             -> Organization: website (optional; boosts Researcher, falls back to email domain)
+    billing_attn/billing_street1/_unit/_city/_state/_zip
+                             -> Organization: Address (assembled; ATTN tops the block). State drives CA tax. -> QBO BillAddr
+    shipping_attn/shipping_street1/_unit/_city/_state/_zip
+                             -> Organization: QBO Shipping Address (optional; ATTN tops the block) -> QBO ShipAddr (require core 4 if any filled)
+    contact_name             -> Person: Name (primary, QBO Contact Type = Primary)
+    contact_title            -> Person: job title (primary)
+    contact_email            -> Person: Email (primary)
+    contact_phone            -> Person: Phone (primary)
+    billing_contact_name     -> Person: Name (QBO Contact Type = Billing) (optional)
+    billing_contact_title    -> Person: job title (optional)
+    billing_contact_email    -> Person: Email (billing) (optional)
+    billing_contact_phone    -> Person: Phone (billing) (optional)
+    preferred_payment_method -> Organization: QBO Primary Payment Method (optional)
+    in_california            -> "yes"/"no": located in or shipping to CA (tax nexus)
+    is_reseller              -> "yes"/"no": buying for resale/wholesale (only asked if in_california=yes)
+    resale_cert_files        -> resale certificate file(s), multiple (only shown if is_reseller=yes)
+    is_cannabis              -> "yes"/"no": CA licensed cannabis company
+    license_number           -> Organization: QBO LIC# (required when is_cannabis=yes)
+    cannabis_license_files   -> CA cannabis license file(s), multiple (only shown if is_cannabis=yes)
+    form_id (hidden)         -> "new_client_setup"
+
+  COMPLETENESS (Make decides the email branch, the form never hard-blocks docs):
+    needs resale cert    = in_california=yes AND is_reseller=yes AND no resale_cert_files
+    needs cannabis lic   = is_cannabis=yes AND no cannabis_license_files
+    either missing       -> "we still need X" email; otherwise -> ready-to-start + bank pick
+
+  Posts as multipart/form-data so uploaded files ride along in one request.
+-->
+<style>
+  :root{
+    --green:#00b142;--green-dk:#009939;
+    --ink:#15171a;--muted:#6c7077;--soft:#9aa0a7;
+    --line:#e4e6e9;--field:#ffffff;--field-line:#cfd3d8;
+    --page:#f3f4f5;--card:#ffffff;--err:#cf2e2e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--page);color:var(--ink);
+    font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+    line-height:1.5;padding:28px 16px 64px;
+  }
+  .wrap{max-width:640px;margin:0 auto}
+
+  .brand{text-align:center;margin-bottom:18px}
+  .brand img{height:54px;width:auto}
+  .wordmark{
+    font-family:'Courier New',monospace;font-weight:700;font-size:22px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--ink);
+  }
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:8px;
+    padding:30px 28px;box-shadow:0 1px 2px rgba(20,23,26,.04);
+  }
+  h1{font-size:24px;letter-spacing:-.2px;margin-bottom:12px;color:var(--green)}
+  .intro{color:var(--muted);font-size:14px;margin-bottom:6px}
+  .intro a{color:var(--green-dk);font-weight:600;text-decoration:none}
+  .intro a:hover{text-decoration:underline}
+
+  .field{margin-top:20px}
+  label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  label .req{color:var(--green-dk);margin-left:2px}
+  .opt{color:var(--soft);font-weight:400}
+  .hint{font-size:12px;color:var(--soft);margin-top:5px;line-height:1.45}
+
+  input[type=text],input[type=email],input[type=tel],textarea,select{
+    width:100%;background:var(--field);border:1px solid var(--field-line);
+    color:var(--ink);padding:11px 13px;border-radius:6px;font-size:15px;
+    font-family:inherit;transition:border-color .12s,box-shadow .12s;
+  }
+  select{appearance:none;-webkit-appearance:none;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5L6 7.5L9 4.5' stroke='%236c7077' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;}
+  textarea{min-height:88px;resize:vertical}
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(0,177,66,.14);
+  }
+  input.bad,textarea.bad,select.bad{border-color:var(--err);box-shadow:0 0 0 3px rgba(207,46,46,.12)}
+  .errline{color:var(--err);font-size:12px;margin-top:5px;display:none}
+  .errline.show{display:block}
+
+  .subhead{
+    margin-top:30px;padding-top:6px;border-top:1px solid var(--line);
+    font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--ink);
+  }
+  .subhead .opt{font-size:12px}
+
+  .file{
+    border:1px dashed var(--field-line);border-radius:6px;padding:14px;
+    background:#fbfcfc;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .file button{
+    background:#fff;border:1px solid var(--field-line);border-radius:5px;
+    padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink);
+  }
+  .file button:hover{border-color:var(--green);color:var(--green-dk)}
+  .file .fname{font-size:13px;color:var(--muted)}
+  input[type=file]{display:none}
+
+  .radio-row{display:flex;gap:10px;flex-wrap:wrap}
+  .radio{
+    flex:1;min-width:150px;display:flex;align-items:center;gap:9px;cursor:pointer;
+    border:1px solid var(--field-line);border-radius:6px;padding:11px 13px;
+    font-size:14px;font-weight:600;background:var(--field);transition:border-color .12s;
+  }
+  .radio input{accent-color:var(--green);width:16px;height:16px;margin:0}
+  .radio:hover{border-color:var(--green)}
+  .samecheck{display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13px;font-weight:600;margin:8px 0 4px}
+  .samecheck input{accent-color:var(--green);width:16px;height:16px;margin:0}
+
+  .row2{display:flex;gap:12px}
+  .row2 .field{margin-top:20px}
+  .row2 .state{flex:1}
+  .row2 .zip{flex:0 0 130px}
+  @media(max-width:520px){ .row2{flex-wrap:wrap} .row2 .field{flex:1 1 100%} }
+
+  .cond{display:none}
+  .cond.show{display:block}
+  .cond.nest{margin-left:0;padding-left:14px;border-left:2px solid rgba(0,177,66,.25)}
+
+  .msg-block{
+    margin-top:24px;padding:16px;background:#f7f8f8;border:1px solid var(--line);
+    border-radius:6px;font-size:13px;color:var(--muted);line-height:1.55;
+  }
+  .msg-block a{color:var(--green-dk);font-weight:600;text-decoration:none}
+
+  .submit{
+    margin-top:24px;width:100%;background:var(--green);color:#fff;border:none;
+    border-radius:6px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;
+    letter-spacing:.01em;transition:background .12s,transform .05s;
+  }
+  .submit:hover{background:var(--green-dk)}
+  .submit:active{transform:translateY(1px)}
+  .submit:disabled{opacity:.6;cursor:default}
+
+  .footnote{margin-top:16px;font-size:12px;color:var(--soft);line-height:1.55}
+  .footnote .star{display:block;margin-bottom:4px}
+
+  .state{display:none;text-align:center;padding:18px 6px}
+  .state.show{display:block}
+  .state .tick{
+    width:56px;height:56px;border-radius:50%;background:rgba(0,177,66,.12);
+    color:var(--green-dk);display:flex;align-items:center;justify-content:center;
+    margin:0 auto 16px;font-size:28px;font-weight:700;
+  }
+  .state h2{font-size:20px;margin-bottom:10px}
+  .state p{color:var(--muted);font-size:14px;max-width:440px;margin:0 auto 6px}
+  .state a{color:var(--green-dk);font-weight:600;text-decoration:none}
+  .state.err .tick{background:rgba(207,46,46,.1);color:var(--err)}
+  .retry{margin-top:18px;background:none;border:1px solid var(--field-line);
+    border-radius:6px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer}
+  .retry:hover{border-color:var(--green);color:var(--green-dk)}
+
+  @media (max-width:520px){
+    .card{padding:24px 18px}
+    h1{font-size:21px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <img id="brandLogo" alt="Punk Hous" style="display:none">
+    <div class="wordmark" id="brandWord">Punk Hous</div>
+  </div>
+
+  <div class="card">
+
+    <!-- ============ FORM ============ -->
+    <form id="setupForm" novalidate>
+      <h1>New Client Setup Form</h1>
+      <p class="intro">
+        We are excited to start working together. We wanted to get the admin out of the way
+        so we can start sending mockups, pricing, and invoices for your orders. To learn more
+        about Punk Hous, visit <a href="https://www.punkhous.com" target="_blank" rel="noopener">www.punkhous.com</a>.
+      </p>
+
+      <div class="field">
+        <label for="company_legal_name">Company name <span class="req">*</span></label>
+        <input type="text" id="company_legal_name" name="company_legal_name" autocomplete="organization" required>
+        <div class="hint">Your company legal name.</div>
+        <div class="errline" data-for="company_legal_name">Please enter your company legal name.</div>
+      </div>
+
+      <div class="field">
+        <label for="company_dba">Company DBA <span class="req">*</span></label>
+        <input type="text" id="company_dba" name="company_dba" required>
+        <div class="hint">The name you want us to reference your company by, if different from your legal business name.</div>
+        <div class="errline" data-for="company_dba">Please enter a DBA (or repeat your legal name).</div>
+      </div>
+
+      <div class="field">
+        <label for="business_url">Business website <span class="opt">(optional)</span></label>
+        <input type="text" id="business_url" name="business_url" autocomplete="url" placeholder="https://">
+        <div class="hint">Helps us learn about your brand and set up your account faster.</div>
+      </div>
+
+      <div class="subhead">Company billing address</div>
+
+      <div class="field">
+        <label for="billing_attn">ATTN <span class="opt">(optional)</span></label>
+        <input type="text" id="billing_attn" name="billing_attn" placeholder="Name or department, e.g. Accounts Payable">
+      </div>
+
+      <div class="field">
+        <label for="billing_street1">Street address <span class="req">*</span></label>
+        <input type="text" id="billing_street1" name="billing_street1" autocomplete="address-line1" required>
+        <div class="errline" data-for="billing_street1">Please enter the street address.</div>
+      </div>
+
+      <div class="field">
+        <label for="billing_unit">Suite / Unit # <span class="opt">(optional)</span></label>
+        <input type="text" id="billing_unit" name="billing_unit" autocomplete="address-line2">
+      </div>
+
+      <div class="field">
+        <label for="billing_city">City <span class="req">*</span></label>
+        <input type="text" id="billing_city" name="billing_city" autocomplete="address-level2" required>
+        <div class="errline" data-for="billing_city">Please enter the city.</div>
+      </div>
+
+      <div class="field">
+          <label for="billing_state">State <span class="req">*</span></label>
+          <select id="billing_state" name="billing_state" required><option value="">State</option><option value="AL">Alabama</option><option value="AK">Alaska</option><option value="AZ">Arizona</option><option value="AR">Arkansas</option><option value="CA">California</option><option value="CO">Colorado</option><option value="CT">Connecticut</option><option value="DE">Delaware</option><option value="DC">District of Columbia</option><option value="FL">Florida</option><option value="GA">Georgia</option><option value="HI">Hawaii</option><option value="ID">Idaho</option><option value="IL">Illinois</option><option value="IN">Indiana</option><option value="IA">Iowa</option><option value="KS">Kansas</option><option value="KY">Kentucky</option><option value="LA">Louisiana</option><option value="ME">Maine</option><option value="MD">Maryland</option><option value="MA">Massachusetts</option><option value="MI">Michigan</option><option value="MN">Minnesota</option><option value="MS">Mississippi</option><option value="MO">Missouri</option><option value="MT">Montana</option><option value="NE">Nebraska</option><option value="NV">Nevada</option><option value="NH">New Hampshire</option><option value="NJ">New Jersey</option><option value="NM">New Mexico</option><option value="NY">New York</option><option value="NC">North Carolina</option><option value="ND">North Dakota</option><option value="OH">Ohio</option><option value="OK">Oklahoma</option><option value="OR">Oregon</option><option value="PA">Pennsylvania</option><option value="RI">Rhode Island</option><option value="SC">South Carolina</option><option value="SD">South Dakota</option><option value="TN">Tennessee</option><option value="TX">Texas</option><option value="UT">Utah</option><option value="VT">Vermont</option><option value="VA">Virginia</option><option value="WA">Washington</option><option value="WV">West Virginia</option><option value="WI">Wisconsin</option><option value="WY">Wyoming</option></select>
+          <div class="errline" data-for="billing_state">Required.</div>
+        </div>
+      <div class="field">
+          <label for="billing_zip">ZIP <span class="req">*</span></label>
+          <input type="text" id="billing_zip" name="billing_zip" autocomplete="postal-code" inputmode="numeric" required>
+          <div class="errline" data-for="billing_zip">Enter a 5-digit ZIP.</div>
+        </div>
+
+      <div class="subhead">Shipping address</div>
+      <label class="samecheck"><input type="checkbox" id="sameAsBilling" name="shipping_same_as_billing" value="yes"> Same as billing address</label>
+
+      <div id="shippingFields">
+      <div class="field">
+        <label for="shipping_attn">ATTN <span class="opt">(optional)</span></label>
+        <input type="text" id="shipping_attn" name="shipping_attn" placeholder="Name or department, e.g. Receiving">
+      </div>
+
+      <div class="field">
+        <label for="shipping_street1">Street address <span class="req">*</span></label>
+        <input type="text" id="shipping_street1" name="shipping_street1" autocomplete="address-line1">
+        <div class="errline" data-for="shipping_street1">Please complete the shipping address.</div>
+      </div>
+
+      <div class="field">
+        <label for="shipping_unit">Suite / Unit # <span class="opt">(optional)</span></label>
+        <input type="text" id="shipping_unit" name="shipping_unit" autocomplete="address-line2">
+      </div>
+
+      <div class="field">
+        <label for="shipping_city">City <span class="req">*</span></label>
+        <input type="text" id="shipping_city" name="shipping_city" autocomplete="address-level2">
+        <div class="errline" data-for="shipping_city">Required.</div>
+      </div>
+
+      <div class="field">
+          <label for="shipping_state">State <span class="req">*</span></label>
+          <select id="shipping_state" name="shipping_state"><option value="">State</option><option value="AL">Alabama</option><option value="AK">Alaska</option><option value="AZ">Arizona</option><option value="AR">Arkansas</option><option value="CA">California</option><option value="CO">Colorado</option><option value="CT">Connecticut</option><option value="DE">Delaware</option><option value="DC">District of Columbia</option><option value="FL">Florida</option><option value="GA">Georgia</option><option value="HI">Hawaii</option><option value="ID">Idaho</option><option value="IL">Illinois</option><option value="IN">Indiana</option><option value="IA">Iowa</option><option value="KS">Kansas</option><option value="KY">Kentucky</option><option value="LA">Louisiana</option><option value="ME">Maine</option><option value="MD">Maryland</option><option value="MA">Massachusetts</option><option value="MI">Michigan</option><option value="MN">Minnesota</option><option value="MS">Mississippi</option><option value="MO">Missouri</option><option value="MT">Montana</option><option value="NE">Nebraska</option><option value="NV">Nevada</option><option value="NH">New Hampshire</option><option value="NJ">New Jersey</option><option value="NM">New Mexico</option><option value="NY">New York</option><option value="NC">North Carolina</option><option value="ND">North Dakota</option><option value="OH">Ohio</option><option value="OK">Oklahoma</option><option value="OR">Oregon</option><option value="PA">Pennsylvania</option><option value="RI">Rhode Island</option><option value="SC">South Carolina</option><option value="SD">South Dakota</option><option value="TN">Tennessee</option><option value="TX">Texas</option><option value="UT">Utah</option><option value="VT">Vermont</option><option value="VA">Virginia</option><option value="WA">Washington</option><option value="WV">West Virginia</option><option value="WI">Wisconsin</option><option value="WY">Wyoming</option></select>
+          <div class="errline" data-for="shipping_state">Required.</div>
+        </div>
+      <div class="field">
+          <label for="shipping_zip">ZIP <span class="req">*</span></label>
+          <input type="text" id="shipping_zip" name="shipping_zip" autocomplete="postal-code" inputmode="numeric">
+          <div class="errline" data-for="shipping_zip">Enter a 5-digit ZIP.</div>
+        </div>
+      </div><!-- /shippingFields -->
+
+      <div class="subhead">Primary contact</div>
+
+      <div class="field">
+        <label for="contact_name">Primary contact first &amp; last name <span class="req">*</span></label>
+        <input type="text" id="contact_name" name="contact_name" autocomplete="name" required>
+        <div class="errline" data-for="contact_name">Please enter the primary contact's full name.</div>
+      </div>
+
+      <div class="field">
+        <label for="contact_title">Primary contact title <span class="opt">(optional)</span></label>
+        <input type="text" id="contact_title" name="contact_title">
+      </div>
+
+      <div class="field">
+        <label for="contact_email">Primary contact email <span class="req">*</span></label>
+        <input type="email" id="contact_email" name="contact_email" autocomplete="email" required>
+        <div class="errline" data-for="contact_email">Please enter a valid email address.</div>
+      </div>
+
+      <div class="field">
+        <label for="contact_phone">Primary contact phone <span class="req">*</span></label>
+        <input type="tel" id="contact_phone" name="contact_phone" autocomplete="tel" required>
+        <div class="errline" data-for="contact_phone">Enter a valid phone number.</div>
+      </div>
+
+      <!-- ---- Billing contact (optional) ---- -->
+      <div class="subhead">Billing contact</div>
+      <label class="samecheck"><input type="checkbox" id="sameAsPrimary" name="billing_contact_same_as_primary" value="yes"> Same as primary contact</label>
+
+      <div id="billingContactFields">
+      <div class="field">
+        <label for="billing_contact_name">Billing contact name <span class="req">*</span></label>
+        <input type="text" id="billing_contact_name" name="billing_contact_name" autocomplete="name">
+        <div class="errline" data-for="billing_contact_name">Please enter the billing contact's full name.</div>
+      </div>
+
+      <div class="field">
+        <label for="billing_contact_title">Billing contact title <span class="opt">(optional)</span></label>
+        <input type="text" id="billing_contact_title" name="billing_contact_title">
+      </div>
+
+      <div class="field">
+        <label for="billing_contact_email">Billing contact email <span class="req">*</span></label>
+        <input type="email" id="billing_contact_email" name="billing_contact_email">
+        <div class="errline" data-for="billing_contact_email">Please enter a valid email address.</div>
+      </div>
+
+      <div class="field">
+        <label for="billing_contact_phone">Billing contact phone <span class="req">*</span></label>
+        <input type="tel" id="billing_contact_phone" name="billing_contact_phone">
+        <div class="errline" data-for="billing_contact_phone">Enter a valid phone number.</div>
+      </div>
+      </div><!-- /billingContactFields -->
+
+      <!-- ---- Payment ---- -->
+      <div class="field">
+        <label for="preferred_payment_method">Preferred payment method <span class="opt">(optional)</span></label>
+        <select id="preferred_payment_method" name="preferred_payment_method">
+          <option value="">Select one</option>
+          <option value="ACH">ACH</option>
+          <option value="Check">Check</option>
+          <option value="Cash">Cash</option>
+          <option value="Wire">Wire</option>
+          <option value="Credit Card">Credit or debit card (3.5% processing fee)</option>
+        </select>
+      </div>
+
+      <!-- ---- California / resale ---- -->
+      <div class="field">
+        <label>Are you located in California or shipping to California? <span class="req">*</span></label>
+        <div class="hint" style="margin-top:0;margin-bottom:8px">
+          If yes and you are buying for resale or wholesale, we will need your resale certificate attached.
+          Otherwise we will have to charge sales tax for any goods. Services provided by Punk Hous are not
+          subject to sales tax.
+        </div>
+        <div class="radio-row">
+          <label class="radio"><input type="radio" name="in_california" value="yes"> Yes</label>
+          <label class="radio"><input type="radio" name="in_california" value="no"> No</label>
+        </div>
+        <div class="errline" data-for="in_california">Please choose one.</div>
+      </div>
+
+      <div class="cond nest" id="resaleQ">
+        <div class="field">
+          <label>Are you buying for resale or wholesale? <span class="req">*</span></label>
+          <div class="radio-row">
+            <label class="radio"><input type="radio" name="is_reseller" value="yes"> Yes, for resale</label>
+            <label class="radio"><input type="radio" name="is_reseller" value="no"> No</label>
+          </div>
+          <div class="errline" data-for="is_reseller">Please choose one.</div>
+        </div>
+
+        <div class="cond" id="resaleUpload">
+          <div class="field">
+            <label for="resale_cert_files" id="resaleLabel">Resale certificate <span class="opt">(for tax-exempt setup)</span></label>
+            <div class="hint" style="margin-top:0;margin-bottom:8px">
+              Upload your current resale certificate so we can set you up as a tax-exempt organization.
+            </div>
+            <div class="file">
+              <button type="button" id="resaleBtn">Choose files</button>
+              <span class="fname" id="resaleName">No file chosen</span>
+              <input type="file" id="resale_cert_files" name="resale_cert_files" multiple
+                     accept=".pdf,.png,.jpg,.jpeg,.doc,.docx">
+            </div>
+            <div class="hint">Accepted file types: JPG, PNG, PDF, or Word. Each file up to 20 MB.</div>
+            <div class="errline" data-for="resale_cert_files">One of those files is over 20 MB. Please upload smaller files.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- Cannabis license ---- -->
+      <div class="field">
+        <label>Are you a California licensed cannabis company? <span class="req">*</span></label>
+        <div class="radio-row">
+          <label class="radio"><input type="radio" name="is_cannabis" value="yes"> Yes</label>
+          <label class="radio"><input type="radio" name="is_cannabis" value="no"> No</label>
+        </div>
+        <div class="errline" data-for="is_cannabis">Please choose one.</div>
+      </div>
+
+      <div class="cond nest" id="cannabisUpload">
+        <div class="field">
+          <label for="license_number">California cannabis license number <span class="req">*</span></label>
+          <input type="text" id="license_number" name="license_number" placeholder="e.g. C11-0000123-LIC">
+          <div class="errline" data-for="license_number">Please enter your license number.</div>
+        </div>
+        <div class="field">
+          <label for="cannabis_license_files">License documents <span class="opt">(you can send later)</span></label>
+          <div class="hint" style="margin-top:0;margin-bottom:8px">
+            Upload copies of your valid California cannabis license documents. You can attach more than one file for each license you hold.
+            Required for licensed cannabis companies under §15041.1.
+          </div>
+          <div class="file">
+            <button type="button" id="cannabisBtn">Choose files</button>
+            <span class="fname" id="cannabisName">No file chosen</span>
+            <input type="file" id="cannabis_license_files" name="cannabis_license_files" multiple
+                   accept=".pdf,.png,.jpg,.jpeg,.doc,.docx">
+          </div>
+          <div class="hint">Accepted file types: JPG, PNG, PDF, or Word. Each file up to 20 MB.</div>
+          <div class="errline" data-for="cannabis_license_files">One of those files is over 20 MB. Please upload smaller files.</div>
+        </div>
+      </div>
+
+      <div class="msg-block">
+        Once you are in our accounting system, we will send you an email with our banking information and our W-9.
+        For further questions, contact us via email at <a href="mailto:info@punkhous.com">info@punkhous.com</a>
+        or by calling our office at <a href="tel:+16197807865">619-780-7865</a>.
+      </div>
+
+      <input type="hidden" name="form_id" value="new_client_setup">
+      <input type="hidden" name="pipedrive_org_id" id="pipedrive_org_id" value="">
+
+      <button type="submit" class="submit" id="submitBtn">Send my Company Setup Details</button>
+
+      <div class="footnote">
+        <span class="star">Required fields are marked with *</span>
+        Never share sensitive information (credit card numbers, social security numbers,
+        passwords) through this form.
+      </div>
+    </form>
+
+    <!-- ============ SUCCESS ============ -->
+    <div class="state" id="okState">
+      <div class="tick">&#10003;</div>
+      <h2>You're all set</h2>
+      <p>Thank you for providing your company information. Once we have you set up in our system,
+         we will send you an email with our banking information and our W-9.</p>
+      <p>For any further questions, you can contact us via email at <a href="mailto:info@punkhous.com">info@punkhous.com</a>
+         or by calling our office at <a href="tel:+16197807865">619-780-7865</a>.</p>
+    </div>
+
+    <!-- ============ ERROR ============ -->
+    <div class="state err" id="errState">
+      <div class="tick">!</div>
+      <h2>That didn't go through</h2>
+      <p>Something went wrong sending your details. Please try again, or contact us via email at
+         <a href="mailto:info@punkhous.com">info@punkhous.com</a> or by calling our office at
+         <a href="tel:+16197807865">619-780-7865</a>.</p>
+      <button class="retry" id="retryBtn">Try again</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  /* ---- wiring ---- */
+  var WEBHOOK_URL = "https://hook.us1.make.com/e2keh6kox0cta5wbk4xho2r65eckotth";
+  var LOGO_URL = ""; // e.g. https://pub-0fb180fc787247409e466fceb9c47147.r2.dev/crown.png
+
+  if (LOGO_URL) {
+    var img = document.getElementById('brandLogo');
+    img.src = LOGO_URL; img.style.display = 'inline-block';
+    document.getElementById('brandWord').style.display = 'none';
+  }
+
+  var form = document.getElementById('setupForm');
+  var okState = document.getElementById('okState');
+  var errState = document.getElementById('errState');
+  var submitBtn = document.getElementById('submitBtn');
+  var MAX = 20*1024*1024;
+  var ALLOWED_EXT = ['pdf','png','jpg','jpeg','doc','docx'];
+  var TYPE_MSG = 'Only JPG, PNG, PDF, or Word files are accepted. Please remove the others.';
+  var SIZE_MSG = 'One of those files is over 20 MB. Please upload smaller files.';
+  function fileBadType(input){
+    for (var i=0;i<input.files.length;i++){
+      var nm = input.files[i].name || '';
+      var dot = nm.lastIndexOf('.');
+      var ext = dot >= 0 ? nm.slice(dot+1).toLowerCase() : '';
+      if (ALLOWED_EXT.indexOf(ext) === -1) return true;
+    }
+    return false;
+  }
+  function fileError(input){
+    if (fileBadType(input)) return TYPE_MSG;
+    if (fileTooBig(input)) return SIZE_MSG;
+    return null;
+  }
+  function setFileErr(input, msg){
+    if (input && input.classList) input.classList.add('bad');
+    var line = form.querySelector('.errline[data-for="'+input.id+'"]');
+    if (line){ line.textContent = msg; line.classList.add('show'); }
+  }
+
+  /* ---- carry Pipedrive org id from the link (e.g. ?org=304) ---- */
+  (function(){
+    var p = new URLSearchParams(window.location.search);
+    var org = (p.get('org') || p.get('org_id') || p.get('organization') || '').replace(/\D/g,'');
+    if (org) document.getElementById('pipedrive_org_id').value = org;
+  })();
+
+  /* ---- helpers ---- */
+  function showErr(el){
+    if (el && el.classList) el.classList.add('bad');
+    var id = el && el.id ? el.id : '';
+    var line = form.querySelector('.errline[data-for="'+id+'"]');
+    if (line) line.classList.add('show');
+  }
+  function clearErr(el){
+    if (el && el.classList) el.classList.remove('bad');
+    var id = el && el.id ? el.id : '';
+    var line = form.querySelector('.errline[data-for="'+id+'"]');
+    if (line) line.classList.remove('show');
+  }
+  function showNamedErr(name){ var l=form.querySelector('.errline[data-for="'+name+'"]'); if(l) l.classList.add('show'); }
+  function clearNamedErr(name){ var l=form.querySelector('.errline[data-for="'+name+'"]'); if(l) l.classList.remove('show'); }
+  function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+  function isZip(v){ return /^\d{5}(-\d{4})?$/.test((v||'').trim()); }
+  function isPhone(v){ return (v||'').replace(/\D/g,'').length >= 10; }
+  function checked(name){ return form.querySelector('input[name="'+name+'"]:checked'); }
+  function show(id){ document.getElementById(id).classList.add('show'); }
+  function hide(id){ document.getElementById(id).classList.remove('show'); }
+  function uncheck(name){ Array.prototype.forEach.call(form.querySelectorAll('input[name="'+name+'"]'), function(r){ r.checked=false; }); }
+
+  /* ---- file pickers (multiple) ---- */
+  function wireFile(btnId, inputId, nameId){
+    var input = document.getElementById(inputId);
+    document.getElementById(btnId).addEventListener('click', function(){ input.click(); });
+    input.addEventListener('change', function(){
+      var n = input.files.length;
+      document.getElementById(nameId).textContent =
+        n === 0 ? 'No file chosen' : (n === 1 ? input.files[0].name : n + ' files chosen');
+      var err = fileError(input);
+      if (err){ setFileErr(input, err); } else { clearErr(input); }
+    });
+  }
+  wireFile('resaleBtn','resale_cert_files','resaleName');
+  wireFile('cannabisBtn','cannabis_license_files','cannabisName');
+
+  /* ---- input auto-formatting ---- */
+  function smartCase(v){
+    v = v.trim().replace(/\s+/g,' ');
+    if (!v) return v;
+    if (/[a-z]/.test(v) && /[A-Z]/.test(v)) return v; // mixed case: respect what they typed
+    var KEEP = {LLC:1,INC:1,LLP:1,LP:1,CO:1,CORP:1,USA:1,US:1,PO:1,NE:1,NW:1,SE:1,SW:1,II:1,III:1,IV:1};
+    return v.replace(/[A-Za-z][A-Za-z']*/g, function(w){
+      var u = w.toUpperCase();
+      if (KEEP[u]) return u;
+      if (w === u && (w.length <= 2 || !/[AEIOU]/.test(w))) return u; // all-caps initials/acronym (KP, JP, KJP): keep as typed
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    });
+  }
+  function normalizeUrl(v){
+    v = v.trim();
+    if (!v) return v;
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v.replace(/^\/+/, '');
+    var m = v.match(/^(https?:\/\/)([^\/?#]+)(.*)$/i);
+    if (m) v = m[1].toLowerCase() + m[2].toLowerCase() + m[3];
+    return v;
+  }
+  function lc(v){ return v.trim().toLowerCase(); }
+  function upTrim(v){ return v.trim().toUpperCase(); }
+  function formatPhone(v){
+    v=(v||'').trim();
+    if(!v) return v;
+    var ext='';
+    var m=v.match(/(?:ext\.?|extension|x|#)\s*(\d+)\s*$/i);
+    if(m){ ext=m[1]; v=v.slice(0,m.index); }
+    var d=v.replace(/\D/g,'');
+    if(d.length===11 && d.charAt(0)==='1') d=d.slice(1);
+    if(d.length>10 && !ext){ ext=d.slice(10); d=d.slice(0,10); }
+    if(d.length===10){
+      var main=d.slice(0,3)+'-'+d.slice(3,6)+'-'+d.slice(6);
+      return ext ? main+' x'+ext : main;
+    }
+    return v.trim()+(ext?' x'+ext:'');
+  }
+
+  var FORMAT = {
+    billing_attn:smartCase, shipping_attn:smartCase,
+    contact_name:smartCase, billing_contact_name:smartCase,
+    billing_city:smartCase, shipping_city:smartCase,
+    billing_street1:smartCase, shipping_street1:smartCase,
+    business_url:normalizeUrl,
+    contact_email:lc, billing_contact_email:lc,
+    contact_phone:formatPhone, billing_contact_phone:formatPhone,
+    license_number:upTrim
+  };
+  Object.keys(FORMAT).forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener('blur', function(){ el.value = FORMAT[id](el.value); });
+  });
+  function formatAll(){ Object.keys(FORMAT).forEach(function(id){ var el=document.getElementById(id); if(el) el.value = FORMAT[id](el.value); }); }
+
+  /* ---- same as billing ---- */
+  var sameAsBilling = document.getElementById('sameAsBilling');
+  var shippingFields = document.getElementById('shippingFields');
+  sameAsBilling.addEventListener('change', function(){
+    if (sameAsBilling.checked){
+      shippingFields.style.display = 'none';
+      ['shipping_street1','shipping_city','shipping_zip','shipping_state'].forEach(function(id){ clearErr(document.getElementById(id)); });
+    } else {
+      shippingFields.style.display = '';
+    }
+  });
+
+  var sameAsPrimary = document.getElementById('sameAsPrimary');
+  var billingContactFields = document.getElementById('billingContactFields');
+  sameAsPrimary.addEventListener('change', function(){
+    if (sameAsPrimary.checked){
+      billingContactFields.style.display = 'none';
+      ['billing_contact_name','billing_contact_email','billing_contact_phone'].forEach(function(id){ clearErr(document.getElementById(id)); });
+    } else {
+      billingContactFields.style.display = '';
+    }
+  });
+
+  /* ---- live (pre-submit) field checks ---- */
+  function liveValidate(id, isBad){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('blur', function(){ if (isBad(el.value)) showErr(el); else clearErr(el); });
+    el.addEventListener('input', function(){ if (el.classList.contains('bad') && !isBad(el.value)) clearErr(el); });
+  }
+  var reqd     = function(v){ return !v.trim(); };
+  var reqEmail = function(v){ return !isEmail(v.trim()); };
+  var optEmail = function(v){ v=v.trim(); return !!v && !isEmail(v); };
+  var reqZip   = function(v){ return !isZip(v); };
+  var optZip   = function(v){ v=v.trim(); return !!v && !isZip(v); };
+  var reqPhone = function(v){ return !isPhone(v); };
+  var optPhone = function(v){ v=v.trim(); return !!v && !isPhone(v); };
+  liveValidate('company_legal_name', reqd);
+  liveValidate('company_dba', reqd);
+  liveValidate('billing_street1', reqd);
+  liveValidate('billing_city', reqd);
+  liveValidate('billing_zip', reqZip);
+  liveValidate('contact_name', reqd);
+  liveValidate('contact_email', reqEmail);
+  liveValidate('contact_phone', reqPhone);
+  liveValidate('billing_contact_name', reqd);
+  liveValidate('billing_contact_email', reqEmail);
+  liveValidate('billing_contact_phone', reqPhone);
+  liveValidate('shipping_street1', reqd);
+  liveValidate('shipping_city', reqd);
+  liveValidate('shipping_zip', reqZip);
+  ['billing_state','shipping_state'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.addEventListener('change', function(){ clearErr(el); });
+  });
+
+  function fileTooBig(input){
+    for (var i=0;i<input.files.length;i++){ if (input.files[i].size > MAX) return true; }
+    return false;
+  }
+
+  /* ---- conditional reveals ---- */
+  Array.prototype.forEach.call(form.querySelectorAll('input[name="in_california"]'), function(r){
+    r.addEventListener('change', function(){
+      clearNamedErr('in_california');
+      if (r.value === 'yes' && r.checked){ show('resaleQ'); }
+      else { hide('resaleQ'); hide('resaleUpload'); uncheck('is_reseller'); clearNamedErr('is_reseller'); }
+    });
+  });
+  Array.prototype.forEach.call(form.querySelectorAll('input[name="is_reseller"]'), function(r){
+    r.addEventListener('change', function(){
+      clearNamedErr('is_reseller');
+      if (r.value === 'yes' && r.checked){ show('resaleUpload'); }
+      else { hide('resaleUpload'); }
+    });
+  });
+  Array.prototype.forEach.call(form.querySelectorAll('input[name="is_cannabis"]'), function(r){
+    r.addEventListener('change', function(){
+      clearNamedErr('is_cannabis');
+      if (r.value === 'yes' && r.checked){ show('cannabisUpload'); }
+      else { hide('cannabisUpload'); clearErr(document.getElementById('license_number')); }
+    });
+  });
+
+  /* ---- validation ---- */
+  function validate(){
+    var ok = true, firstBad = null;
+
+    ['company_legal_name','company_dba','billing_street1','billing_city','contact_name']
+      .forEach(function(id){
+        var el = document.getElementById(id);
+        if (!el.value.trim()){ showErr(el); ok=false; firstBad=firstBad||el; } else clearErr(el);
+      });
+
+    var bzip = document.getElementById('billing_zip');
+    if (!isZip(bzip.value)){ showErr(bzip); ok=false; firstBad=firstBad||bzip; } else clearErr(bzip);
+
+    var bst = document.getElementById('billing_state');
+    if (!bst.value){ showErr(bst); ok=false; firstBad=firstBad||bst; } else clearErr(bst);
+
+    if (document.getElementById('sameAsBilling').checked){
+      ['shipping_street1','shipping_city','shipping_zip','shipping_state']
+        .forEach(function(id){ clearErr(document.getElementById(id)); });
+    } else {
+      ['shipping_street1','shipping_city'].forEach(function(id){
+        var el=document.getElementById(id);
+        if(!el.value.trim()){ showErr(el); ok=false; firstBad=firstBad||el; } else clearErr(el);
+      });
+      var szip=document.getElementById('shipping_zip');
+      if(!isZip(szip.value)){ showErr(szip); ok=false; firstBad=firstBad||szip; } else clearErr(szip);
+      var sst=document.getElementById('shipping_state');
+      if(!sst.value){ showErr(sst); ok=false; firstBad=firstBad||sst; } else clearErr(sst);
+    }
+
+    var em = document.getElementById('contact_email');
+    if (!isEmail(em.value.trim())){ showErr(em); ok=false; firstBad=firstBad||em; } else clearErr(em);
+
+    var cph = document.getElementById('contact_phone');
+    if (!isPhone(cph.value)){ showErr(cph); ok=false; firstBad=firstBad||cph; } else clearErr(cph);
+
+    if (document.getElementById('sameAsPrimary').checked){
+      ['billing_contact_name','billing_contact_email','billing_contact_phone']
+        .forEach(function(id){ clearErr(document.getElementById(id)); });
+    } else {
+      var bnm = document.getElementById('billing_contact_name');
+      if (!bnm.value.trim()){ showErr(bnm); ok=false; firstBad=firstBad||bnm; } else clearErr(bnm);
+
+      var bem = document.getElementById('billing_contact_email');
+      if (!isEmail(bem.value.trim())){ showErr(bem); ok=false; firstBad=firstBad||bem; } else clearErr(bem);
+
+      var bcp = document.getElementById('billing_contact_phone');
+      if (!isPhone(bcp.value)){ showErr(bcp); ok=false; firstBad=firstBad||bcp; } else clearErr(bcp);
+    }
+
+    if (!checked('in_california')){ showNamedErr('in_california'); ok=false; firstBad=firstBad||form.querySelector('input[name="in_california"]'); }
+    else clearNamedErr('in_california');
+
+    var caYes = checked('in_california') && checked('in_california').value === 'yes';
+    if (caYes && !checked('is_reseller')){ showNamedErr('is_reseller'); ok=false; firstBad=firstBad||form.querySelector('input[name="is_reseller"]'); }
+    else clearNamedErr('is_reseller');
+
+    if (!checked('is_cannabis')){ showNamedErr('is_cannabis'); ok=false; firstBad=firstBad||form.querySelector('input[name="is_cannabis"]'); }
+    else clearNamedErr('is_cannabis');
+
+    var cannYes = checked('is_cannabis') && checked('is_cannabis').value === 'yes';
+    var lic = document.getElementById('license_number');
+    if (cannYes && !lic.value.trim()){ showErr(lic); ok=false; firstBad=firstBad||lic; } else clearErr(lic);
+
+    var rf = document.getElementById('resale_cert_files');
+    var rfErr = fileError(rf);
+    if (rfErr){ setFileErr(rf, rfErr); ok=false; firstBad=firstBad||rf; } else clearErr(rf);
+    var cf = document.getElementById('cannabis_license_files');
+    var cfErr = fileError(cf);
+    if (cfErr){ setFileErr(cf, cfErr); ok=false; firstBad=firstBad||cf; } else clearErr(cf);
+
+    if (firstBad) firstBad.scrollIntoView({behavior:'smooth',block:'center'});
+    return ok;
+  }
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    formatAll();
+    /* gate uploads: only submit files for sections that currently apply, so flipping an
+       earlier answer never sends a stale file and never silently drops a kept one */
+    if (!document.getElementById('resaleUpload').classList.contains('show')){
+      document.getElementById('resale_cert_files').value='';
+      document.getElementById('resaleName').textContent='No file chosen';
+    }
+    if (!document.getElementById('cannabisUpload').classList.contains('show')){
+      document.getElementById('cannabis_license_files').value='';
+      document.getElementById('cannabisName').textContent='No file chosen';
+      document.getElementById('license_number').value='';
+    }
+    if (!validate()) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+
+    var data = new FormData(form); // includes files + hidden form_id
+
+    fetch(WEBHOOK_URL, { method:'POST', body:data })
+      .then(function(r){ if(!r.ok) throw new Error('bad status'); return r; })
+      .then(function(){
+        form.style.display = 'none';
+        okState.classList.add('show');
+        okState.scrollIntoView({behavior:'smooth',block:'center'});
+      })
+      .catch(function(){
+        form.style.display = 'none';
+        errState.classList.add('show');
+        errState.scrollIntoView({behavior:'smooth',block:'center'});
+      });
+  });
+
+  document.getElementById('retryBtn').addEventListener('click', function(){
+    errState.classList.remove('show');
+    form.style.display = 'block';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send my Company Setup Details';
+  });
+</script>
+</body>
+</html>
