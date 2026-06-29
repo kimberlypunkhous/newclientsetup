@@ -49,7 +49,7 @@
     --green:#00b142;--green-dk:#009939;
     --ink:#15171a;--muted:#6c7077;--soft:#9aa0a7;
     --line:#e4e6e9;--field:#ffffff;--field-line:#cfd3d8;
-    --page:#f3f4f5;--card:#ffffff;--err:#cf2e2e;
+    --page:#000000;--card:#ffffff;--err:#cf2e2e;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{-webkit-text-size-adjust:100%}
@@ -61,7 +61,7 @@
   .wrap{max-width:640px;margin:0 auto}
 
   .brand{text-align:center;margin-bottom:18px}
-  .brand img{height:54px;width:auto}
+  .brand img{height:54px;width:auto;filter:brightness(0) invert(1)}
   .wordmark{
     font-family:'Courier New',monospace;font-weight:700;font-size:22px;
     letter-spacing:.22em;text-transform:uppercase;color:var(--ink);
@@ -476,7 +476,7 @@
 <script>
   /* ---- wiring ---- */
   var WEBHOOK_URL = "https://hook.us1.make.com/e2keh6kox0cta5wbk4xho2r65eckotth";
-  var LOGO_URL = ""; // e.g. https://pub-0fb180fc787247409e466fceb9c47147.r2.dev/crown.png
+  var LOGO_URL = "https://pub-0fb180fc787247409e466fceb9c47147.r2.dev/LOGO_PUNKHOUS.png"; // e.g. https://pub-0fb180fc787247409e466fceb9c47147.r2.dev/crown.png
 
   if (LOGO_URL) {
     var img = document.getElementById('brandLogo');
