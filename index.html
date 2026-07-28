@@ -137,6 +137,29 @@
   .cond.show{display:block}
   .cond.nest{margin-left:0;padding-left:14px;border-left:2px solid rgba(0,177,66,.25)}
 
+  /* payment dropdown: in-page, matches the native select styling exactly */
+  .pmsel{position:relative}
+  .pmsel-btn{
+    width:100%;background:var(--field);border:1px solid var(--field-line);color:var(--ink);
+    padding:11px 34px 11px 13px;border-radius:6px;font-size:15px;font-family:inherit;
+    text-align:left;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5L6 7.5L9 4.5' stroke='%236c7077' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 13px center;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    transition:border-color .12s,box-shadow .12s;
+  }
+  .pmsel-btn.ph{color:var(--soft)}
+  .pmsel-btn:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(0,177,66,.14)}
+  .pmsel.open .pmsel-btn{border-color:var(--green)}
+  .pmsel-panel{
+    display:none;position:absolute;z-index:40;left:0;right:0;top:calc(100% + 6px);
+    background:#fff;border:1px solid var(--field-line);border-radius:6px;padding:6px;
+    box-shadow:0 8px 24px rgba(20,23,26,.18);
+  }
+  .pmsel.open .pmsel-panel{display:block}
+  .pmsel-opt{padding:10px 12px;border-radius:5px;cursor:pointer;font-size:14px;color:var(--ink)}
+  .pmsel-opt:hover{background:#f2f4f5}
+
   .msg-block{
     margin-top:24px;padding:16px;background:#f7f8f8;border:1px solid var(--line);
     border-radius:6px;font-size:13px;color:var(--muted);line-height:1.55;
@@ -346,14 +369,21 @@
       <!-- ---- Payment ---- -->
       <div class="field">
         <label for="preferred_payment_method">Preferred payment method <span class="opt">(optional)</span></label>
-        <select id="preferred_payment_method" name="preferred_payment_method">
-          <option value="">Select one</option>
-          <option value="ACH">ACH</option>
-          <option value="Check">Check</option>
-          <option value="Cash">Cash</option>
-          <option value="Wire">Wire</option>
-          <option value="Credit Card">Credit or debit card (3.5% processing fee)</option>
-        </select>
+        <!-- Native <select> replaced 2026-07-28: its popup would not open inside the
+             Wix iframe. This is an in-page dropdown, so there is no native popup to
+             stick. The posted field name and every value are UNCHANGED. -->
+        <div class="pmsel" id="payMsel">
+          <button type="button" class="pmsel-btn ph" id="payBtn" aria-haspopup="listbox" aria-expanded="false">Select one</button>
+          <div class="pmsel-panel" id="payPanel" role="listbox">
+            <div class="pmsel-opt" data-val="">Select one</div>
+            <div class="pmsel-opt" data-val="ACH">ACH</div>
+            <div class="pmsel-opt" data-val="Check">Check</div>
+            <div class="pmsel-opt" data-val="Cash">Cash</div>
+            <div class="pmsel-opt" data-val="Wire">Wire</div>
+            <div class="pmsel-opt" data-val="Credit Card">Credit or debit card (3.5% processing fee)</div>
+          </div>
+        </div>
+        <input type="hidden" id="preferred_payment_method" name="preferred_payment_method" value="">
       </div>
 
       <!-- ---- California / resale ---- -->
@@ -514,6 +544,28 @@
     var line = form.querySelector('.errline[data-for="'+input.id+'"]');
     if (line){ line.textContent = msg; line.classList.add('show'); }
   }
+
+  /* ---- payment dropdown (replaces the native select) ---- */
+  (function(){
+    var wrap  = document.getElementById('payMsel');
+    var btn   = document.getElementById('payBtn');
+    var panel = document.getElementById('payPanel');
+    var field = document.getElementById('preferred_payment_method');
+    function open(o){ wrap.classList.toggle('open', o); btn.setAttribute('aria-expanded', o?'true':'false'); }
+    btn.addEventListener('click', function(e){ e.stopPropagation(); open(!wrap.classList.contains('open')); });
+    panel.addEventListener('click', function(e){
+      e.stopPropagation();
+      var t = e.target;
+      if (!t.classList.contains('pmsel-opt')) return;
+      var v = t.getAttribute('data-val') || '';
+      field.value = v;
+      btn.textContent = t.textContent;
+      btn.classList.toggle('ph', !v);
+      open(false);
+    });
+    document.addEventListener('click', function(){ open(false); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') open(false); });
+  })();
 
   /* ---- carry Pipedrive org id from the link (e.g. ?org=304) ---- */
   (function(){
