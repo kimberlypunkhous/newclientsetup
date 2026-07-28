@@ -458,6 +458,9 @@
          we will send you an email with our banking information and our W-9.</p>
       <p>For any further questions, you can contact us via email at <a href="mailto:info@punkhous.com">info@punkhous.com</a>
          or by calling our office at <a href="tel:+16197807865">619-780-7865</a>.</p>
+      <p id="ncsFallbackLink" style="display:none;margin-top:20px">
+        <a href="https://www.punkhous.com/thank-you-new-client-setup" target="_top">Continue &#8594;</a>
+      </p>
     </div>
 
     <!-- ============ ERROR ============ -->
@@ -692,7 +695,7 @@
     r.addEventListener('change', function(){
       clearNamedErr('is_cannabis');
       if (r.value === 'yes' && r.checked){ show('cannabisUpload'); }
-      else { hide('cannabisUpload'); clearErr(document.getElementById('license_number')); }
+      else { hide('cannabisUpload'); document.getElementById('license_number').value=''; clearErr(document.getElementById('license_number')); }
     });
   });
 
@@ -783,7 +786,6 @@
     if (!document.getElementById('cannabisUpload').classList.contains('show')){
       document.getElementById('cannabis_license_files').value='';
       document.getElementById('cannabisName').textContent='No file chosen';
-      document.getElementById('license_number').value='';
     }
     if (!validate()) return;
 
@@ -794,17 +796,49 @@
 
     fetch(WEBHOOK_URL, { method:'POST', body:data })
       .then(function(r){ if(!r.ok) throw new Error('bad status'); return r; })
-      .then(function(){
-        form.style.display = 'none';
-        okState.classList.add('show');
-        okState.scrollIntoView({behavior:'smooth',block:'center'});
-      })
+      .then(goThankYou)
       .catch(function(){
         form.style.display = 'none';
         errState.classList.add('show');
         errState.scrollIntoView({behavior:'smooth',block:'center'});
       });
   });
+
+  /* ------------------------------------------------------------------
+     THANK-YOU REDIRECT (added 2026-07-28)
+     The Pipedrive LeadBooster form this page replaced REDIRECTED to a real
+     thank-you URL on submit, and the Google conversion counts that landing.
+     An in-page panel alone never changes the URL, so that conversion has not
+     fired since this form went live. Two attempts, because a sandboxed iframe
+     may permit one and refuse the other:
+       1. an anchor with target=_top, which counts as user-activated navigation
+       2. a direct window.top assignment
+     If we are still alive 1.8s later, navigation was refused; we fall back to
+     the existing in-page panel plus a manual Continue link so the visitor can
+     still reach the thank-you page and still be counted.
+     ------------------------------------------------------------------ */
+  var THANKYOU_URL = "https://www.punkhous.com/thank-you-new-client-setup";
+
+  function goThankYou(){
+    try {
+      var a = document.createElement('a');
+      a.href = THANKYOU_URL; a.target = '_top'; a.rel = 'noopener';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+    } catch (e) {}
+    try {
+      if (window.top && window.top !== window.self) window.top.location.href = THANKYOU_URL;
+      else window.location.href = THANKYOU_URL;
+    } catch (e) {}
+    setTimeout(function(){
+      var fb = document.getElementById('ncsFallbackLink');
+      if (fb) fb.style.display = 'block';
+      form.style.display = 'none';
+      okState.classList.add('show');
+      okState.scrollIntoView({behavior:'smooth',block:'center'});
+    }, 1800);
+  }
 
   document.getElementById('retryBtn').addEventListener('click', function(){
     errState.classList.remove('show');
